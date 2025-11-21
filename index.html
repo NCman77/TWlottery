@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台彩全能分析儀</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Zen Maru Gothic"', 'sans-serif'] },
+                    colors: {
+                        school: {
+                            stat: '#3B82F6',    // Blue
+                            pattern: '#8B5CF6', // Purple
+                            balance: '#10B981', // Green
+                            ai: '#F59E0B'       // Amber
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #f8fafc; }
+        .school-card { transition: all 0.2s; cursor: pointer; border: 2px solid transparent; }
+        .school-card:hover { transform: translateY(-2px); }
+        .school-card.active { border-color: currentColor; background-color: white; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        
+        /* 派系特定樣式 */
+        .school-stat { color: #3B82F6; }
+        .school-pattern { color: #8B5CF6; }
+        .school-balance { color: #10B981; }
+        .school-ai { color: #F59E0B; }
+
+        .ball { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; box-shadow: 1px 1px 3px rgba(0,0,0,0.15); font-size: 15px; position: relative; z-index: 1; }
+        .ball-hot { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); color: #b91c1c; border: 2px solid #f87171; }
+        .stat-box { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        
+        /* 次數標籤 */
+        .count-badge { font-size: 0.7rem; background-color: #f1f5f9; padding: 2px 6px; border-radius: 99px; margin-top: -8px; padding-top: 10px; z-index: 0; color: #64748b; font-weight: bold; border: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body class="text-slate-700 p-4 md:p-6 min-h-screen">
+
+    <div class="max-w-5xl mx-auto">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-black mb-2 text-slate-800 tracking-tight">台彩全能分析儀 <span class="text-blue-600">V15</span></h1>
+            <p class="text-slate-500 text-sm">純淨輕量版 • 即時數據解碼 • 四大戰術流派</p>
+        </header>
+
+        <div class="bg-white rounded-2xl p-6 shadow-sm mb-6 border border-slate-200">
+            <div class="flex flex-col md:flex-row gap-6 items-stretch">
+                
+                <div class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:bg-slate-50 transition">
+                    <span class="text-2xl mb-2">🌐</span>
+                    <h3 class="font-bold text-slate-700 mb-1">步驟 1：取得資料</h3>
+                    <p class="text-xs text-slate-400 mb-3">前往官網下載「開獎結果」ZIP 檔</p>
+                    <a href="https://www.taiwanlottery.com.tw/lotto/result_all.aspx" target="_blank" class="bg-slate-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-slate-700 transition flex items-center gap-2">
+                        🚀 開啟台彩下載頁
+                    </a>
+                </div>
+
+                <div class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-blue-300 rounded-xl p-4 text-center bg-blue-50/30 hover:bg-blue-50 transition relative">
+                    <span class="text-2xl mb-2">📂</span>
+                    <h3 class="font-bold text-blue-600 mb-1">步驟 2：讀取分析</h3>
+                    <p class="text-xs text-blue-400 mb-3">直接上傳下載好的 ZIP 檔</p>
+                    <input type="file" id="fileInput" accept=".zip" class="hidden" />
+                    <button onclick="document.getElementById('fileInput').click()" class="bg-blue-500 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-600 transition shadow-md shadow-blue-200">
+                        📂 選擇 ZIP 檔案
+                    </button>
+                    <div id="load-msg" class="mt-2 text-xs text-green-600 font-bold hidden">✅ 分析完成</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboard-area" class="hidden">
+            <div class="bg-slate-800 text-white rounded-t-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">🎯</span>
+                    <select id="game-selector" class="bg-slate-700 border border-slate-600 text-white text-lg rounded-lg px-4 py-1 font-bold cursor-pointer hover:bg-slate-600 focus:outline-none"></select>
+                </div>
+                <div class="text-xs text-slate-400">
+                    資料庫總筆數：<span id="total-count" class="text-white font-bold text-base">0</span> 期
+                    <span class="mx-2">|</span>
+                    資料區間：<span id="date-range" class="text-white">...</span>
+                </div>
+            </div>
+
+            <div class="bg-slate-100 border-x border-b border-slate-200 p-4 rounded-b-2xl mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                <div class="stat-box">
+                    <h4 class="font-bold text-slate-500 text-xs uppercase mb-3 flex justify-between">
+                        🔥 本年度熱門 (Top 5)
+                        <span class="text-slate-300" id="year-label">202X</span>
+                    </h4>
+                    <div id="stat-year" class="flex flex-wrap gap-3 justify-center"></div>
+                </div>
+
+                <div class="stat-box">
+                    <h4 class="font-bold text-slate-500 text-xs uppercase mb-3 flex justify-between">
+                        📅 本月份熱門 (Top 5)
+                        <span class="text-slate-300" id="month-label">Month</span>
+                    </h4>
+                    <div id="stat-month" class="flex flex-wrap gap-3 justify-center"></div>
+                </div>
+
+                <div class="stat-box">
+                    <h4 class="font-bold text-slate-500 text-xs uppercase mb-3 flex justify-between">
+                        ⚡ 近 10 期熱門 (Top 5)
+                        <span class="text-slate-300">Trend</span>
+                    </h4>
+                    <div id="stat-recent" class="flex flex-wrap gap-3 justify-center"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="strategy-area" class="hidden">
+            <h3 class="font-bold text-xl mb-4 text-center text-slate-800">🧠 選擇您的戰術流派</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div class="school-card school-stat bg-white p-4 rounded-xl shadow-sm relative active" onclick="selectSchool('stat')">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="text-2xl">📊</div>
+                        <h4 class="font-bold">統計學派</h4>
+                    </div>
+                    <p class="text-xs opacity-70 leading-tight">冷熱號 / 回歸平均</p>
+                    <div class="absolute top-4 right-4 w-3 h-3 rounded-full border-2 border-current bg-current" id="dot-stat"></div>
+                </div>
+
+                <div class="school-card school-pattern bg-white p-4 rounded-xl shadow-sm relative" onclick="selectSchool('pattern')">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="text-2xl">🔗</div>
+                        <h4 class="font-bold">關聯性學派</h4>
+                    </div>
+                    <p class="text-xs opacity-70 leading-tight">拖牌 / 版路 / 尾數</p>
+                    <div class="absolute top-4 right-4 w-3 h-3 rounded-full border-2 border-current opacity-0" id="dot-pattern"></div>
+                </div>
+
+                <div class="school-card school-balance bg-white p-4 rounded-xl shadow-sm relative" onclick="selectSchool('balance')">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="text-2xl">⚖️</div>
+                        <h4 class="font-bold">結構平衡學派</h4>
+                    </div>
+                    <p class="text-xs opacity-70 leading-tight">聰明包牌 / 奇偶比</p>
+                    <div class="absolute top-4 right-4 w-3 h-3 rounded-full border-2 border-current opacity-0" id="dot-balance"></div>
+                </div>
+
+                <div class="school-card school-ai bg-white p-4 rounded-xl shadow-sm relative" onclick="selectSchool('ai')">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="text-2xl">🤖</div>
+                        <h4 class="font-bold">AI 機器學習</h4>
+                    </div>
+                    <p class="text-xs opacity-70 leading-tight">時間序列 / 趨勢</p>
+                    <div class="absolute top-4 right-4 w-3 h-3 rounded-full border-2 border-current opacity-0" id="dot-ai"></div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100">
+                <div id="school-description" class="mb-6 text-sm leading-relaxed text-slate-600 bg-slate-50 p-5 rounded-xl border-l-4 border-blue-500"></div>
+
+                <div class="flex flex-col items-center gap-6">
+                    
+                    <div class="flex items-center bg-slate-100 p-1.5 rounded-lg">
+                        <span class="text-xs font-bold text-slate-500 px-3">生成組數：</span>
+                        <div class="flex gap-1">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="count" value="1" class="peer hidden" checked>
+                                <span class="block px-4 py-1.5 rounded bg-white text-slate-400 peer-checked:bg-slate-800 peer-checked:text-white text-sm font-bold transition shadow-sm">1 組</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="count" value="3" class="peer hidden">
+                                <span class="block px-4 py-1.5 rounded bg-white text-slate-400 peer-checked:bg-slate-800 peer-checked:text-white text-sm font-bold transition shadow-sm">3 組</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="count" value="5" class="peer hidden">
+                                <span class="block px-4 py-1.5 rounded bg-white text-slate-400 peer-checked:bg-slate-800 peer-checked:text-white text-sm font-bold transition shadow-sm">5 組</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button onclick="runPrediction()" class="w-full md:w-auto bg-gradient-to-r from-slate-800 to-slate-900 text-white px-12 py-4 rounded-xl font-black text-lg shadow-xl shadow-slate-300 hover:scale-105 hover:shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                        <span>🚀</span> 執行運算與生成
+                    </button>
+                </div>
+
+                <div id="result-area" class="mt-8 hidden border-t border-slate-100 pt-8">
+                    <h4 class="text-center font-bold text-slate-400 mb-6 text-sm">推薦號碼組合</h4>
+                    <div id="prediction-output" class="space-y-4"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // === 狀態管理 ===
+        let rawData = {}; // 存放解析後的資料
+        let currentGame = "";
+        let currentSchool = "stat"; 
+
+        // === 學校說明文案 (已根據需求更新) ===
+        const schoolInfo = {
+            stat: {
+                color: "border-blue-500",
+                title: "統計學派：冷熱號與回歸平均 (The Statistical School)",
+                desc: `
+                    <p class="mb-2">這是最傳統也最常見的方法。</p>
+                    <p class="font-bold mb-1">核心邏輯：</p>
+                    <ul class="list-disc pl-5 mb-2 space-y-1">
+                        <li><span class="font-bold">慣性定律（熱號）：</span>認為機器或球組有物理偏差，或者短期內有某種趨勢，所以最近常開的號碼，下一期還會開。</li>
+                        <li><span class="font-bold">回歸平均（冷號）：</span>認為機率最終會公平。如果 05 號已經 100 期沒開了（遠低於理論機率），它就「該還債」了，所以賭它即將開出。</li>
+                    </ul>
+                    <p class="font-bold mb-1">常見手法：</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>計算每個號碼的歷史出現次數。</li>
+                        <li>計算「遺漏值」（目前已經連續幾期沒開）。</li>
+                    </ul>
+                `
+            },
+            pattern: {
+                color: "border-purple-500",
+                title: "關聯性學派：拖牌與版路 (The Association/Pattern School)",
+                desc: `
+                    <p class="mb-2">這是台灣彩迷最喜歡研究的領域，俗稱「看版路」。</p>
+                    <p class="font-bold mb-1">核心邏輯：</p>
+                    <ul class="list-disc pl-5 mb-2 space-y-1">
+                        <li>認為號碼之間有隱藏的連結。</li>
+                        <li><span class="font-bold">拖牌（Conditional Probability）：</span>如果這一期開了 01，歷史數據顯示下一期特別容易開 25。這在統計上稱為「條件機率」。</li>
+                        <li><span class="font-bold">尾數法則：</span>認為每一期的「尾數」（例如 01, 11, 21, 31 都算 1 尾）有某種規律。</li>
+                        <li><span class="font-bold">連莊與連號：</span>賭上一期的號碼會重複掉下來（連莊），或是號碼會相連（如 12, 13）。</li>
+                    </ul>
+                    <p class="font-bold mb-1">盲點：</p>
+                    <p>人類大腦很擅長在隨機雜訊中尋找圖形（Pareidolia），很多所謂的「版路」其實只是巧合，但在短期內看起來像是一種規律。</p>
+                `
+            },
+            balance: {
+                color: "border-green-500",
+                title: "結構平衡學派：聰明包牌 (The Balancing School)",
+                desc: `
+                    <p class="mb-2">這派不預測「哪個號碼會開」，而是預測「哪種結構機率最高」。</p>
+                    <p class="font-bold mb-1">核心邏輯：</p>
+                    <ul class="list-disc pl-5 mb-2 space-y-1">
+                        <li><span class="font-bold">常態分佈：</span>雖然每個號碼機率一樣，但「組合」的機率不一樣。</li>
+                        <li><span class="font-bold">奇偶比：</span>6 個號碼全部是偶數的機率極低。通常會選「3奇3偶」或「4奇2偶」。</li>
+                        <li><span class="font-bold">大小比：</span>全部都是小號碼（1-24）或全部大號碼（25-49）的機率很低。</li>
+                        <li><span class="font-bold">總和值：</span>6 個號碼加起來的總和，通常會落在一個鐘形曲線的中間區域（例如大樂透約在 120-180 之間）。</li>
+                    </ul>
+                    <p class="font-bold mb-1">應用：</p>
+                    <p>這通常用於「刪去法」，把那些極端不合理的組合（例如 1,2,3,4,5,6）過濾掉，以節省投注成本。</p>
+                `
+            },
+            ai: {
+                color: "border-amber-500",
+                title: "AI 與機器學習派 (The AI/Machine Learning School)",
+                desc: `
+                    <p class="mb-2">這是近年來比較新的嘗試，使用 LSTM（長短期記憶模型）或神經網路。</p>
+                    <p class="font-bold mb-1">核心邏輯：</p>
+                    <ul class="list-disc pl-5 mb-2 space-y-1">
+                        <li>把彩券開獎當作「時間序列數據」（Time Series Data），就像預測股票或天氣一樣。</li>
+                        <li>丟入幾千期的歷史資料，讓電腦自己去找出人類肉眼看不出來的非線性關係。</li>
+                    </ul>
+                    <p class="font-bold mb-1">殘酷的現實：</p>
+                    <ul class="list-disc pl-5 mb-2 space-y-1">
+                        <li>股票是有因果關係的（公司賺錢 -> 股價漲），但彩券是<span class="font-bold">「獨立隨機事件」</span>（Independent Random Events）。</li>
+                        <li>AI 在這種純隨機數據上非常容易發生<span class="font-bold">「過度擬合 (Overfitting)」</span>。也就是說，AI 可以完美背下過去的歷史，但對未來的預測能力接近於零，因為過去的雜訊並不能預示未來。</li>
+                    </ul>
+                `
+            }
+        };
+
+        // === 初始化 ===
+        window.onload = function() {
+            updateDescription();
+        };
+
+        function selectSchool(school) {
+            currentSchool = school;
+            document.querySelectorAll('.school-card').forEach(el => {
+                el.classList.remove('active');
+                el.querySelector('.rounded-full').classList.add('opacity-0');
+                el.querySelector('.rounded-full').classList.remove('bg-current');
+            });
+            const activeCard = document.querySelector(`.school-${school}`);
+            activeCard.classList.add('active');
+            const dot = activeCard.querySelector('.rounded-full');
+            dot.classList.remove('opacity-0');
+            dot.classList.add('bg-current');
+            updateDescription();
+        }
+
+        function updateDescription() {
+            const info = schoolInfo[currentSchool];
+            const container = document.getElementById('school-description');
+            container.className = `mb-6 text-sm leading-relaxed text-slate-600 bg-slate-50 p-5 rounded-xl border-l-4 ${info.color}`;
+            container.innerHTML = `<h4 class="text-lg font-bold mb-2 text-slate-800">${info.title}</h4>${info.desc}`;
+        }
+
+        // === 檔案處理 (無記憶體存儲) ===
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            if(e.target.files.length > 0) {
+                document.getElementById('load-msg').innerText = "分析中...";
+                document.getElementById('load-msg').classList.remove('hidden');
+                
+                const data = await parseZip(e.target.files[0]);
+                if(Object.keys(data).length > 0) {
+                    rawData = data;
+                    document.getElementById('load-msg').innerText = `✅ 成功載入 ${Object.keys(data).length} 種玩法`;
+                    initGameSelector(Object.keys(data));
+                }
+            }
+        });
+
+        async function parseZip(file) {
+            const zip = await JSZip.loadAsync(file, { decodeFileName: (bytes) => new TextDecoder("big5").decode(bytes) });
+            let result = {};
+            for (const filename of Object.keys(zip.files)) {
+                if (zip.files[filename].dir || filename.startsWith('__')) continue;
+                if (filename.toLowerCase().endsWith('.csv')) {
+                    const content = await zip.files[filename].async('arraybuffer');
+                    const text = new TextDecoder("big5").decode(content);
+                    const gameName = filename.split(/[_.]/)[0];
+                    const parsed = parseCSVManual(text);
+                    if(parsed.length > 0) result[gameName] = parsed;
+                }
+            }
+            return result;
+        }
+
+        function parseCSVManual(text) {
+            const lines = text.split(/\r\n|\n/);
+            let result = [];
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+                let parts = line.split(',').map(p => p.replace(/"/g, '').trim());
+                let dateObj = null;
+                let nums = [];
+                for (let col of parts) {
+                    const dateMatch = col.match(/^(\d{3,4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+                    if (dateMatch && !dateObj) {
+                        let y = parseInt(dateMatch[1]);
+                        if(y<1911) y+=1911;
+                        dateObj = new Date(y, parseInt(dateMatch[2])-1, parseInt(dateMatch[3]));
+                        continue;
+                    }
+                    let n = parseInt(col);
+                    if (!isNaN(n) && n >= 0 && n <= 99) nums.push(n);
+                }
+                if (dateObj && nums.length >= 2) result.push({ date: dateObj, numbers: nums });
+            }
+            return result.sort((a, b) => b.date - a.date);
+        }
+
+        function initGameSelector(games) {
+            const sel = document.getElementById('game-selector');
+            sel.innerHTML = '';
+            games.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g; opt.innerText = g;
+                sel.appendChild(opt);
+            });
+            document.getElementById('dashboard-area').classList.remove('hidden');
+            document.getElementById('strategy-area').classList.remove('hidden');
+            sel.addEventListener('change', () => updateDashboard());
+            updateDashboard();
+        }
+
+        // === 儀表板與統計邏輯 ===
+        function updateDashboard() {
+            currentGame = document.getElementById('game-selector').value;
+            const data = rawData[currentGame];
+            if(!data || data.length === 0) return;
+
+            document.getElementById('total-count').innerText = data.length;
+            const firstDate = data[data.length-1].date.toLocaleDateString();
+            const lastDate = data[0].date.toLocaleDateString();
+            document.getElementById('date-range').innerText = `${firstDate} ~ ${lastDate}`;
+
+            // 1. 年度熱門
+            const currentYear = data[0].date.getFullYear();
+            document.getElementById('year-label').innerText = currentYear;
+            const yearData = data.filter(d => d.date.getFullYear() === currentYear);
+            renderHotStats('stat-year', yearData);
+
+            // 2. 本月熱門
+            const currentMonth = data[0].date.getMonth();
+            document.getElementById('month-label').innerText = data[0].date.toLocaleString('default', { month: 'short' });
+            const monthData = yearData.filter(d => d.date.getMonth() === currentMonth);
+            renderHotStats('stat-month', monthData);
+
+            // 3. 近10期
+            const recentData = data.slice(0, 10);
+            renderHotStats('stat-recent', recentData);
+        }
+
+        function renderHotStats(elementId, dataset) {
+            const el = document.getElementById(elementId);
+            if(!dataset || dataset.length === 0) {
+                el.innerHTML = '<span class="text-slate-300 text-xs">無資料</span>';
+                return;
+            }
+            
+            const freq = {};
+            dataset.forEach(d => d.numbers.forEach(n => freq[n] = (freq[n]||0)+1));
+            
+            // 排序並取前 5 名
+            const sorted = Object.entries(freq).sort((a,b) => b[1] - a[1]).slice(0, 5);
+            
+            let html = '';
+            sorted.forEach(([n, count]) => {
+                html += `
+                <div class="flex flex-col items-center">
+                    <div class="ball ball-hot">${n}</div>
+                    <div class="count-badge">${count}次</div>
+                </div>`;
+            });
+            el.innerHTML = html;
+        }
+
+        // === 預測核心 (多組生成) ===
+        function runPrediction() {
+            if(!currentGame || !rawData[currentGame]) return;
+            const data = rawData[currentGame];
+            const ballsPerDraw = Math.round(data.reduce((a,b)=>a+b.numbers.length,0)/data.length);
+            
+            let maxN = 0;
+            data.forEach(d => d.numbers.forEach(n => { if(n > maxN) maxN = n; }));
+
+            const setSize = parseInt(document.querySelector('input[name="count"]:checked').value);
+            const container = document.getElementById('prediction-output');
+            container.innerHTML = '';
+            document.getElementById('result-area').classList.remove('hidden');
+
+            for(let i=0; i<setSize; i++) {
+                let prediction = [];
+                if (currentSchool === 'stat') prediction = algoStat(data, maxN, ballsPerDraw);
+                else if (currentSchool === 'pattern') prediction = algoPattern(data, maxN, ballsPerDraw);
+                else if (currentSchool === 'balance') prediction = algoBalance(data, maxN, ballsPerDraw);
+                else if (currentSchool === 'ai') prediction = algoAI(data, maxN, ballsPerDraw);
+                
+                renderRow(prediction, i+1);
+            }
+        }
+
+        function renderRow(nums, index) {
+            const container = document.getElementById('prediction-output');
+            const colors = {
+                stat: 'bg-blue-100 text-blue-700',
+                pattern: 'bg-purple-100 text-purple-700',
+                balance: 'bg-green-100 text-green-700',
+                ai: 'bg-amber-100 text-amber-700'
+            };
+            const colorClass = colors[currentSchool];
+            
+            let html = `<div class="flex flex-wrap items-center justify-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-slate-100 animate-fade-in">
+                <span class="text-xs font-bold text-slate-300 mr-2">#${index}</span>`;
+            nums.forEach(n => {
+                html += `<div class="ball ${colorClass}">${n}</div>`;
+            });
+            html += `</div>`;
+            container.innerHTML += html;
+        }
+
+        // 演算法
+        function algoStat(data, maxN, count) {
+            const freq = {};
+            data.forEach(d => d.numbers.forEach(n => freq[n] = (freq[n]||0)+1));
+            const last50 = new Set();
+            data.slice(0, 50).forEach(d => d.numbers.forEach(n => last50.add(n)));
+            const weights = {};
+            for(let i=1; i<=maxN; i++) {
+                let w = freq[i] || 0;
+                if(!last50.has(i)) w += (data.length / 10); 
+                w = w * (0.95 + Math.random() * 0.1); 
+                weights[i] = w;
+            }
+            return weightedRandomSelect(weights, maxN, count);
+        }
+
+        function algoPattern(data, maxN, count) {
+            if(data.length < 2) return algoStat(data, maxN, count);
+            const lastDraw = data[0].numbers; 
+            const nextDrawCounts = {};
+            for(let i=1; i<data.length; i++) {
+                const intersection = data[i].numbers.filter(n => lastDraw.includes(n));
+                if(intersection.length > 0) {
+                    data[i-1].numbers.forEach(n => {
+                        nextDrawCounts[n] = (nextDrawCounts[n]||0) + intersection.length;
+                    });
+                }
+            }
+            if(Object.keys(nextDrawCounts).length === 0) return algoStat(data, maxN, count);
+            for(let k in nextDrawCounts) nextDrawCounts[k] = nextDrawCounts[k] * (0.9 + Math.random() * 0.2);
+            return weightedRandomSelect(nextDrawCounts, maxN, count);
+        }
+
+        function algoBalance(data, maxN, count) {
+            let bestSet = [];
+            let minScore = 9999;
+            for(let k=0; k<500; k++) { 
+                const set = [];
+                const pool = Array.from({length: maxN}, (_, i) => i + 1);
+                for(let i=0; i<count; i++) {
+                    const idx = Math.floor(Math.random() * pool.length);
+                    set.push(pool[idx]);
+                    pool.splice(idx, 1);
+                }
+                set.sort((a,b)=>a-b);
+                let odd = set.filter(n => n%2!==0).length;
+                let even = count - odd;
+                let diffOE = Math.abs(odd - even);
+                let sum = set.reduce((a,b)=>a+b, 0);
+                let expectedSum = (1 + maxN) * count / 2;
+                let diffSum = Math.abs(sum - expectedSum) / expectedSum;
+                let score = diffOE * 10 + diffSum * 100;
+                if(score < minScore) { minScore = score; bestSet = set; }
+            }
+            return bestSet;
+        }
+
+        function algoAI(data, maxN, count) {
+            const weights = {};
+            data.forEach((d, idx) => {
+                const weight = 1000 / (idx + 10); 
+                d.numbers.forEach(n => {
+                    weights[n] = (weights[n]||0) + weight;
+                });
+            });
+            for(let k in weights) weights[k] = weights[k] * (0.9 + Math.random() * 0.2);
+            return weightedRandomSelect(weights, maxN, count);
+        }
+
+        function weightedRandomSelect(weights, maxN, count) {
+            let pool = [];
+            for(let i=1; i<=maxN; i++) {
+                let w = weights[i] || 1;
+                w = Math.ceil(w); 
+                if(w > 100) w = 100; 
+                for(let k=0; k<w; k++) pool.push(i);
+            }
+            const res = new Set();
+            while(res.size < count) {
+                const n = pool[Math.floor(Math.random() * pool.length)];
+                res.add(n);
+            }
+            return Array.from(res).sort((a,b)=>a-b);
+        }
+    </script>
+</body>
+</html>
